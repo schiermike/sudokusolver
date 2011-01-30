@@ -6,7 +6,7 @@
 
  good reference: http://www.sudokuwiki.org
  SUDOKUS:
- easy:     ....41....6....2...........32.6.........5..417...........2..3...48......5.1......
+ hidden-triple: 38.......97.21....6..583...2...5.9..5..621..3..8.....5...435..2...19..56.5......1
  moderate: 4...1.......3.9.4..7...5..9....6..21..4.7.6..19..5....9..4...7..3.6.8.......3...6
  boxline:  .3621.84.8...45631.14863..9287.3.456693584...1456723984.8396...35..28.64.6.45..83
  linebox:  7..921483..95...6...8...5...8.453.76..7...8..5..7...4...3.......2....7..87.195...
@@ -61,6 +61,7 @@ int is_solved() {
 	for(i=0; i<81; i++)
 	if(!is_fixed(s[i]))
 		return 0;
+	printf("solved!\n");
 	return 1;
 }
 
@@ -249,6 +250,56 @@ int simplify_nakedpair_struc(int* struc[9]) {
 	return progress;
 }
 
+// === NAKED TRIPLE ===================================================================================
+
+int simplify_nakedtriple() {
+	int i;
+	for(i=0; i<9; i++)
+		if(simplify_nakedtriple_struc(row[i])) {
+			printf("nakedtriple(row%d)\n",i+1);
+			return 1;
+		}
+	for(i=0; i<9; i++)
+		if(simplify_nakedtriple_struc(col[i])) {
+			printf("nakedtriple(col%d)\n", i+1);
+			return 1;
+		}
+	for(i=0; i<9; i++)
+		if(simplify_nakedtriple_struc(box[i])) {
+			printf("nakedtriple(box%d)\n", i+1);
+			return 1;
+		}
+	return 0;
+}
+
+int simplify_nakedtriple_struc(int* struc[9]) {
+	int progress = 0;
+	int i1,i2,i3,k;
+	for(i1=0; i1<9; i1++) {
+		if(count(*struc[i1]) != 3)
+			continue;
+		for(i2=i1+1; i2<9; i2++) {
+			if(*struc[i1] != *struc[i2])
+				continue;
+			for(i3=i2+1; i3<9; i3++) {
+				if(*struc[i1] != *struc[i3])
+					continue;
+				// we found a triple, now remove these numbers from the remaining cells
+				for(k=0; k<9; k++) {
+					if(i1==k || i2==k || i3==k)
+						continue;
+					if(*struc[k] & *struc[i1]) {
+						*struc[k] = *struc[k] & ~*struc[i1]; // flip the corresponding bits to zero
+						progress = 1;
+					}
+				}
+			}
+		}
+	}
+
+	return progress;
+}
+
 // === HIDDEN PAIR ===================================================================================
 
 int simplify_hiddenpair() {
@@ -301,6 +352,67 @@ int simplify_hiddenpair_struc(int* struc[9]) {
 						*struc[i] = mask12; // for the two cells containing the hidden pair, no other candidates are possible
 						progress = 1;
 					}
+		}
+	}
+		
+	
+
+	return progress;
+}
+
+// === HIDDEN TRIPLE ===================================================================================
+
+int simplify_hiddentriple() {
+	int i;
+	for(i=0; i<9; i++)
+		if(simplify_hiddentriple_struc(row[i])) {
+			printf("hiddentriple(row%d)\n",i+1);
+			return 1;
+		}
+	for(i=0; i<9; i++)
+		if(simplify_hiddentriple_struc(col[i])) {
+			printf("hiddentriple(col%d)\n", i+1);
+			return 1;
+		}
+	for(i=0; i<9; i++)
+		if(simplify_hiddentriple_struc(box[i])) {
+			printf("hiddentriple(box%d)\n", i+1);
+			return 1;
+		}
+	return 0;
+}
+
+int simplify_hiddentriple_struc(int* struc[9]) {
+	int progress = 0;
+	// first build mask from fixed values
+	int fixed = get_fixed_mask(struc);
+
+	// then check for all triples not part of this mask
+	int n1, n2, n3;
+	for(n1=1; n1<=9;n1++) {
+		if(mask[n1] & fixed) // n1 already fixed for this row
+			continue;
+		for(n2=n1+1; n2<=9; n2++) {
+			if(mask[n2] & fixed) // n2 already fixed for this row
+				continue;
+			for(n3=n2+1; n3<=9; n3++) {
+				if(mask[n3] & fixed) // n3 already fixed for this row
+					continue;
+				int mask123 = mask[n1] | mask[n2] | mask[n3];
+				// applying (x and mask) to all nine cells should be true exactly three times
+				int c = 0;
+				int i;
+				for(i=0; i<9; i++)
+					if(*struc[i] & mask123)
+						c++;
+				if(c != 3)
+					continue;
+				for(i=0; i<9; i++)
+					if( (*struc[i] & mask123) && (*struc[i] & ~mask123) ) {
+						*struc[i] &= mask123; // for the three cells containing the hidden triple, no other candidates are possible
+						progress = 1;
+					}
+			}
 		}
 	}
 		
@@ -408,7 +520,13 @@ int main(int argc, char** args) {
 		if(simplify_nakedpair())
 			continue;
 
+		if(simplify_nakedtriple())
+			continue;
+
 		if(simplify_hiddenpair())
+			continue;
+
+		if(simplify_hiddentriple())
 			continue;
 
 		if(simplify_intersection())
