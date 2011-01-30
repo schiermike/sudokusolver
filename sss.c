@@ -5,11 +5,9 @@
  SIMPLE SUDOKU SOLVER
 
  good reference: http://www.sudokuwiki.org
- SUDOKUS:
- hidden-triple: 38.......97.21....6..583...2...5.9..5..621..3..8.....5...435..2...19..56.5......1
+ still unsolvable sudokus:
+ xwing: 294167835736.8.192158.9.476..7.1..29.2974.518581.29.479.2.3.7548.5.7.963.7395.281
  moderate: 4...1.......3.9.4..7...5..9....6..21..4.7.6..19..5....9..4...7..3.6.8.......3...6
- boxline:  .3621.84.8...45631.14863..9287.3.456693584...1456723984.8396...35..28.64.6.45..83
- linebox:  7..921483..95...6...8...5...8.453.76..7...8..5..7...4...3.......2....7..87.195...
 */
 
 // === COMMON STUFF ===================================================================================
@@ -47,7 +45,7 @@ int get_fixed_mask(int* struc[9]) {
 }
 
 // count how many values are still possible for this cell
-int count(int v) {
+int count_possible_for_cell(int v) {
 	int i;
 	int c = 0;
 	for(i=1; i<=9; i++)
@@ -236,7 +234,7 @@ int simplify_nakedpair_struc(int* struc[9]) {
 	int progress = 0;
 	int i,j,k;
 	for(i=0; i<9; i++)
-		if(count(*struc[i]) == 2)
+		if(count_possible_for_cell(*struc[i]) == 2)
 			for(j=i+1; j<9; j++)
 				if(*struc[i] == *struc[j]) { // we have found a nakedpair - can we use it?
 					for(k=0; k<9; k++)
@@ -276,7 +274,7 @@ int simplify_nakedtriple_struc(int* struc[9]) {
 	int progress = 0;
 	int i1,i2,i3,k;
 	for(i1=0; i1<9; i1++) {
-		if(count(*struc[i1]) != 3)
+		if(count_possible_for_cell(*struc[i1]) != 3)
 			continue;
 		for(i2=i1+1; i2<9; i2++) {
 			if(*struc[i1] != *struc[i2])
@@ -500,6 +498,69 @@ int simplify_intersection_struc(int* struc1[9], int* struc2[9], int struc2_offse
 	return progress;
 }
 
+// === X-WING FUNCTION ===================================================================================
+
+int simplify_xwing() {
+	int n;
+	for(n=1; n<=9; n++) {
+		if(simplify_xwing_struc(mask[n], row, col)) {
+			printf("xwing(%d, row->col)\n", n);
+			return 1;
+		}
+		if(simplify_xwing_struc(mask[n], col, row)) {
+			printf("xwing(%d, col->row)\n", n);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int simplify_xwing_struc(int v, int* struc1[9][9], int* struc2[9][9]) {
+	int progress = 0;
+	int i1, i2;
+	for(i1=0; i1<9; i1++) {
+		int idx[2] = {-1,-1};
+		int k;
+		for(k=0; k<9; k++)
+			if(*struc1[i1][k] & v) {
+				if(idx[0] == -1)
+					idx[0] = k;
+				else if(idx[1] == -1)
+					idx[1] = k;
+				else {
+					idx[1] = -1;
+					break;
+				}
+			}
+		if(idx[1] == -1) // if n does not occur exactly twice in the structure
+			continue;		
+		for(i2=i1+1; i2<9; i2++) {
+			int check = 1;
+			for(k=0; k<9; k++) // check whether v occurs in the second structure at exactly the same places
+				if( (k==idx[0] || k==idx[1]) && !(*struc1[i2][k] & v) || k!=idx[0] && k!=idx[1] && (*struc1[i2][k] & v) )
+					check = 0;
+			if(!check)
+				continue;
+
+			// we found a x-wing constellation -> remove v from the corresponding cols/rows
+			for(k=0; k<9; k++) {
+				if(k==i1 || k==i2)
+					continue;
+				if(*struc2[idx[0]][k] & v) {
+					*struc2[idx[0]][k] &= ~v;
+					progress = 1;
+				}
+				if(*struc2[idx[1]][k] & v) {
+					*struc2[idx[1]][k] &= ~v;
+					progress = 1;
+				}
+			}
+		}
+	}
+
+	return progress;
+}
+
 // === MAIN FUNCTION ===================================================================================
 
 int main(int argc, char** args) {
@@ -530,6 +591,9 @@ int main(int argc, char** args) {
 			continue;
 
 		if(simplify_intersection())
+			continue;
+
+		if(simplify_xwing())
 			continue;
 
 		printf("THIS SUDOKU IS TOO HARD TO SOLVE FOR ME!\n");
